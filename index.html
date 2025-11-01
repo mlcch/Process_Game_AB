@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Process My Little Cup – Avenue Blanc</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#333366">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 650px;
+            margin: auto;
+            background: #ffffff;
+        }
+        h1 {
+            color: #333366;
+            margin-bottom: 10px;
+        }
+        .datetime {
+            font-size: 1.05em;
+            margin-bottom: 20px;
+            color: #444;
+        }
+        .section {
+            margin-top: 18px;
+            padding: 12px 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .section h2 {
+            color: #444;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 4px;
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-size: 1.05em;
+        }
+        .task {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin: 6px 0;
+            font-size: 0.94em;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+            transition: transform 0.15s ease-out, opacity 0.15s ease-out;
+            touch-action: pan-y;
+        }
+        .task.done {
+            display: none;
+        }
+        .task.swiping {
+            opacity: 0.7;
+        }
+        .small-hint {
+            font-size: 0.7em;
+            color: #999;
+            margin-top: 3px;
+        }
+    </style>
+    <script>
+        function updateDateTime() {
+            const now = new Date();
+            const dateTimeString = now.toLocaleString('fr-FR', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const el = document.getElementById('currentDateTime');
+            if (el) el.textContent = dateTimeString;
+        }
+
+        function enableSwipe(taskEl) {
+            let startX = 0;
+            let currentX = 0;
+            let isSwiping = false;
+            const SWIPE_THRESHOLD = 50;
+
+            taskEl.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                startX = touch.clientX;
+                currentX = startX;
+                isSwiping = true;
+                taskEl.classList.add('swiping');
+            }, {passive: true});
+
+            taskEl.addEventListener('touchmove', (e) => {
+                if (!isSwiping) return;
+                const touch = e.touches[0];
+                currentX = touch.clientX;
+                const deltaX = currentX - startX;
+                taskEl.style.transform = `translateX(${deltaX}px)`;
+            }, {passive: true});
+
+            taskEl.addEventListener('touchend', () => {
+                if (!isSwiping) return;
+                const deltaX = currentX - startX;
+                taskEl.classList.remove('swiping');
+                taskEl.style.transform = 'translateX(0)';
+
+                if (deltaX > SWIPE_THRESHOLD) {
+                    markTaskDone(taskEl);
+                } else if (deltaX < -SWIPE_THRESHOLD) {
+                    moveTaskToBottom(taskEl);
+                }
+                isSwiping = false;
+            });
+        }
+
+        function markTaskDone(taskEl) {
+            taskEl.classList.add('done');
+            const id = taskEl.dataset.id;
+            if (!id) return;
+            const doneTasks = JSON.parse(localStorage.getItem('mlc_done_tasks') || '[]');
+            if (!doneTasks.includes(id)) {
+                doneTasks.push(id);
+                localStorage.setItem('mlc_done_tasks', JSON.stringify(doneTasks));
+            }
+        }
+
+        function moveTaskToBottom(taskEl) {
+            const parent = taskEl.parentElement;
+            parent.appendChild(taskEl);
+        }
+
+        function restoreDoneTasks() {
+            const doneTasks = JSON.parse(localStorage.getItem('mlc_done_tasks') || '[]');
+            doneTasks.forEach(id => {
+                const el = document.querySelector(`.task[data-id="${id}"]`);
+                if (el) el.classList.add('done');
+            });
+        }
+
+        // register service worker (pour offline / ajout écran d’accueil)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(() => {});
+            });
+        }
+
+        window.onload = function () {
+            updateDateTime();
+            setInterval(updateDateTime, 60000);
+
+            document.querySelectorAll('.task').forEach((task, index) => {
+                if (!task.dataset.id) {
+                    task.dataset.id = 'task-' + index;
+                }
+                enableSwipe(task);
+            });
+
+            restoreDoneTasks();
+        };
+    </script>
+</head>
+<body>
+    <h1>Process My Little Cup Avenue Blanc</h1>
+    <div class="datetime" id="currentDateTime">...</div>
+    <p class="small-hint">👉 Swipe RIGHT = done • 👈 Swipe LEFT = send to bottom</p>
+
+    <!-- OPEN -->
+    <div class="section" id="open">
+        <h2>Open</h2>
+        <div class="task" data-id="open-1">Bring back trays and check tables on the way back</div>
+    </div>
+
+    <!-- RUSH -->
+    <div class="section" id="rush">
+        <h2>Rush</h2>
+        <div class="task" data-id="rush-1">— (à compléter)</div>
+    </div>
+
+    <!-- POST-RUSH -->
+    <div class="section" id="post-rush">
+        <h2>Post-Rush</h2>
+        <div class="task" data-id="pr-1">09:45–11:30 Counter - post morning rush clean</div>
+        <div class="task" data-id="pr-2">10:00–10:15 1st barista take 15' break</div>
+        <div class="task" data-id="pr-3">10:00–10:03 Refill Ubermilk / Oat Milk</div>
+        <div class="task" data-id="pr-4">10:03–10:05 Refill grinder</div>
+        <div class="task" data-id="pr-5">10:05–10:06 Clean around grinder</div>
+        <div class="task" data-id="pr-6">10:06–10:10 Rincer machine tray + rince pichet + pichets + glass shots + chiffon buse</div>
+        <div class="task" data-id="pr-7">10:10–10:13 Clean counter surfaces and around the espresso machine (barista station) with spray + paper</div>
+        <div class="task" data-id="pr-8">10:13–10:15 Clean machine pannels</div>
+        <div class="task" data-id="pr-9">10:15–10:30 2nd barista takes 15' break</div>
+        <div class="task" data-id="pr-10">10:30–10:32 Passer balai derrière le comptoir</div>
+        <div class="task" data-id="pr-11">10:32–10:50 Stamp 50 cups / 50 pastry bags / 50 ice cups / 10 bottles</div>
+        <div class="task" data-id="pr-12">10:50–10:55 Nettoyer sol toilettes avec serpillère réserve, check toilets</div>
+        <div class="task" data-id="pr-13">11:30–11:35 Put all forks and knifes in paper towels</div>
+        <div class="task" data-id="pr-14">11:45–11:47 Refill ice machine / glacière</div>
+        <div class="task" data-id="pr-15">11:47–11:55 Refill Ubermilk + ROA + Grinder &amp; clean barista station</div>
+    </div>
+
+    <!-- CUISINE -->
+    <div class="section" id="cuisine">
+        <h2>Cuisine</h2>
+        <div class="task" data-id="cu-1">10:30–11:45 Kitchen (1 barista)</div>
+        <div class="task" data-id="cu-2">10:30–11:40 Prepare yogourts &gt; sandwiches &gt; bagels &gt; prepare trays for close if available</div>
+        <div class="task" data-id="cu-3">11:40–11:45 Clean preparation table AND prepare almond croissants station</div>
+        <div class="task" data-id="cu-4">14:30–15:30 Cuisine – Closing Preparation</div>
+        <div class="task" data-id="cu-5">14:30–15:00 Prepare yogourts / bagels / chia pudding</div>
+        <div class="task" data-id="cu-6">15:00–15:05 Clean preparation table and prepare almond croissants station</div>
+        <div class="task" data-id="cu-7">15:05–15:05 Prepare trays pastries</div>
+    </div>
+
+    <!-- PRE-RUSH DEJEUNER -->
+    <div class="section" id="pre-rush-dejeuner">
+        <h2>Pré-Rush déjeuner</h2>
+        <div class="task" data-id="prd-1">09:45–11:30 Counter – lunch rush preparation</div>
+        <div class="task" data-id="prd-2">09:45–09:50 Refill viennoiseries / pastries / check quantities &amp; potentially cook more</div>
+        <div class="task" data-id="prd-3">10:15–10:17 Refill ice machine / glacière</div>
+        <div class="task" data-id="prd-4">10:17–10:20 Check batch brew quantity and prepare 2nd batch if &lt; 2 cups left</div>
+        <div class="task" data-id="prd-5">10:20–10:30 Press 6 orange juices</div>
+        <div class="task" data-id="prd-6">11:45–12:15 Counter</div>
+    </div>
+
+    <!-- RUSH DEJEUNER -->
+    <div class="section" id="rush-dejeuner">
+        <h2>Rush déjeuner</h2>
+        <div class="task" data-id="rd-1">11:45–12:15 1 barista takes lunch break</div>
+        <div class="task" data-id="rd-2">11:45–12:15 Counter</div>
+    </div>
+
+    <!-- POST-RUSH DEJEUNER -->
+    <div class="section" id="post-rush-dejeuner">
+        <h2>Post-Rush déjeuner</h2>
+        <div class="task" data-id="prd2-1">13:45–14:30 Counter – post rush clean</div>
+        <div class="task" data-id="prd2-2">13:45–14:15 2nd barista takes lunch break</div>
+        <div class="task" data-id="prd2-3">14:00–14:02 Refill ice machine / glacière</div>
+        <div class="task" data-id="prd2-4">14:02–14:05 Refill Ubermilk / Grinder &amp; clean barista station</div>
+        <div class="task" data-id="prd2-5">14:05–14:10 Check pastries / viennoiseries and potentially cook more</div>
+    </div>
+
+    <!-- PRE-CLOSE -->
+    <div class="section" id="pre-close">
+        <h2>Pré-Close</h2>
+        <div class="task" data-id="pc-1">14:30–15:30 Counter – Closing preparation</div>
+        <div class="task" data-id="pc-2">14:30–14:35 Next day Moccamaster: Prepare coffee dose + filter</div>
+        <div class="task" data-id="pc-3">14:35–14:37 Fill below coffee machine with Solo coffee bags</div>
+        <div class="task" data-id="pc-4">14:37–14:43 Empty trash and replace bag: below sink / coffee / main room</div>
+        <div class="task" data-id="pc-5">14:45–14:55 Fill basket's orange + 1 bottle full of orange juice + 3×250ml in self service fridge</div>
+        <div class="task" data-id="pc-6">14:55–15:00 Fill counter fridge with milk and 10 oat milk</div>
+        <div class="task" data-id="pc-7">15:00–15:10 Re-arrange pastries &amp; regroup on right side. Clean pastry showcase top</div>
+        <div class="task" data-id="pc-8">15:05–15:10 Empty trash and replace bag</div>
+        <div class="task" data-id="pc-9">15:10–15:15 Toilets cleaning</div>
+        <div class="task" data-id="pc-10">15:10–15:12 Empty dirty hand paper basket</div>
+        <div class="task" data-id="pc-11">15:12–15:18 Clean floor</div>
+        <div class="task" data-id="pc-12">15:18–15:20 Check overall cleanliness</div>
+        <div class="task" data-id="pc-13">15:20–15:25 Empty trash and replace bags</div>
+        <div class="task" data-id="pc-14">15:25–15:45 Counter</div>
+        <div class="task" data-id="pc-15">15:45–15:50 Clean Ubermilk</div>
+        <div class="task" data-id="pc-16">15:50–16:20 Launch Moccamaster 1L water + 1 tsp Pulycaff (no filter) – let 30'</div>
+        <div class="task" data-id="pc-17">16:04–16:30 Main room – clean tables, sweep, stains</div>
+        <div class="task" data-id="pc-18">16:15–16:17 Attach cable for terrace (code 789)</div>
+        <div class="task" data-id="pc-19">16:17–16:20 Refill lids, realign fridge products, prepare water jar</div>
+        <div class="task" data-id="pc-20">16:20–16:21 Warn customers we close in ~10'</div>
+        <div class="task" data-id="pc-21">16:25–16:30 Clean barista station + pitchers + trays + espresso machine pannels</div>
+        <div class="task" data-id="pc-22">16:30–16:40 Closing – Espresso machine &amp; Grinder cleaning</div>
+        <div class="task" data-id="pc-23">16:30–16:32 Unscrew shower screens</div>
+        <div class="task" data-id="pc-24">16:32–16:34 Backflush with 1 coffee spoon PulyCaff</div>
+        <div class="task" data-id="pc-25">16:33–16:45 Soak portafilters / baskets / shower screens in PulyCaff</div>
+        <div class="task" data-id="pc-26">16:34–16:35 Clean exterior of espresso machine</div>
+        <div class="task" data-id="pc-27">16:35–16:38 Empty / clean grinder</div>
+        <div class="task" data-id="pc-28">16:38–16:40 Clean Moccamaster thermos and place to dry</div>
+    </div>
+
+    <!-- CLOSE -->
+    <div class="section" id="close">
+        <h2>Close</h2>
+        <div class="task" data-id="cl-1">16:47–17:15 Closing – Counter</div>
+        <div class="task" data-id="cl-2">16:47–16:48 Put croissant &amp; pain chocolat in box → kitchen fridge (need 20 total)</div>
+        <div class="task" data-id="cl-3">16:48–16:50 Discard remaining pastries (register as waste in iPad)</div>
+        <div class="task" data-id="cl-4">16:50–16:55 Clean pastry showcase, prepare paper sheets &amp; labels</div>
+        <div class="task" data-id="cl-5">16:55–17:00 Place milk box on counter, prepare Ubermilk filter, dry pipe, refill counter fridge</div>
+        <div class="task" data-id="cl-6">17:00–17:15 Closing – Main room</div>
+        <div class="task" data-id="cl-7">17:00–17:05 Get last empty cups, clean last tables</div>
+        <div class="task" data-id="cl-8">17:05–17:06 Take picture of self service fridge and send on Slack</div>
+        <div class="task" data-id="cl-9">17:05–17:06 Change water jar (already prepared)</div>
+        <div class="task" data-id="cl-10">17:06–17:10 Clean recycling station / clean last cups</div>
+        <div class="task" data-id="cl-11">17:10–17:12 Turn off washing machine</div>
+        <div class="task" data-id="cl-12">17:20–17:23 Take gray emptying stuff out</div>
+        <div class="task" data-id="cl-13">17:25–17:27 Fill checklist with visa</div>
+        <div class="task" data-id="cl-14">17:27–17:30 Close register – Clock-out</div>
+    </div>
+</body>
+</html>
