@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>MLC – Dashboard tâches</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b0b0b;
+      color: #fff;
+      padding: 18px;
+    }
+    h1 { font-size: 1.2rem; margin-bottom: 10px; }
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .78rem;
+    }
+    th, td {
+      padding: 6px 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    th { text-align: left; font-weight: 600; }
+    .badge {
+      display: inline-block;
+      background: #00ff66;
+      color: #000;
+      padding: 1px 7px 2px;
+      border-radius: 999px;
+      font-size: 0.6rem;
+    }
+    #loginBox input {
+      width: 100%;
+      margin-bottom: 6px;
+      padding: 5px 7px;
+      border-radius: 6px;
+      border: none;
+    }
+    #loginBox button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      background: #00ff66;
+    }
+  </style>
+</head>
+<body>
+  <h1>MLC – Dashboard tâches</h1>
+
+  <div id="loginBox" class="card">
+    <p>Connexion Supabase</p>
+    <input id="email" type="email" placeholder="email…">
+    <input id="pass" type="password" placeholder="mot de passe…">
+    <button onclick="doLogin()">Se connecter</button>
+    <div id="loginErr" style="color:#f88;font-size:.7rem;margin-top:4px;"></div>
+  </div>
+
+  <div id="content" style="display:none;">
+    <div class="card">
+      <h2 id="todayTitle">Aujourd’hui</h2>
+      <p><strong id="doneCount">0</strong> tâches faites / <span id="totalTasks">80</span> prévues</p>
+      <p style="font-size:.7rem;color:#aaa;">(total fixe : tu peux mettre 80, 90…)</p>
+    </div>
+
+    <div class="card">
+      <h3>Par barista aujourd’hui</h3>
+      <canvas id="byBarista" height="140"></canvas>
+    </div>
+
+    <div class="card">
+      <h3>Tâches faites aujourd’hui</h3>
+      <table id="tasksTable">
+        <thead>
+          <tr>
+            <th>Heure</th>
+            <th>Tâche</th>
+            <th>Barista</th>
+            <th>Section</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL  = "https://juxppkjqsnzjomxrviez.supabase.co";
+    const SUPABASE_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1eHBwa2pxc256am9teHJ2aWV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMzAyODMsImV4cCI6MjA3NzYwNjI4M30.LlWf3ougVJLRxvlUbSjKIVCL8_eWgIqVOVGI7ZkAKAs";
+    const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const FIXED_TOTAL_TASKS = 80; // ↩️ tu règles ici
+
+    async function doLogin() {
+      const email = document.getElementById('email').value.trim();
+      const pass  = document.getElementById('pass').value.trim();
+      const err   = document.getElementById('loginErr');
+
+      const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
+      if (error) {
+        err.textContent = error.message;
+        return;
+      }
+      document.getElementById('loginBox').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+      loadDashboard();
+    }
+
+    function todayISO() {
+      return new Date().toISOString().slice(0,10);
+    }
+
+    async function loadDashboard() {
+      const today = todayISO();
+      document.getElementById('todayTitle').textContent = "Aujourd'hui (" + today + ")";
+
+      // 1. tâches faites aujourd’hui
+      const { data: doneRows, error } = await supa
+        .from('task_state')
+        .select('*')
+        .eq('task_date', today)
+        .eq('done', true)
+        .order('done_at', { ascending: false });
+
+      if (error) {
+        console.warn(error);
+        return;
+      }
+
+      // compteur
+      document.getElementById('doneCount').textContent = doneRows.length;
+      document.getElementById('totalTasks').textContent = FIXED_TOTAL_TASKS;
+
+      // tableau
+      const tbody = document.querySelector('#tasksTable tbody');
+      tbody.innerHTML = "";
+      doneRows.forEach(r => {
+        const tr = document.createElement('tr');
+        const h = r.done_at ? new Date(r.done_at).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) : '';
+        tr.innerHTML = `
+          <td>${h}</td>
+          <td>${r.task_id}</td>
+          <td>${r.done_by || ''}</td>
+          <td>${r.section || ''}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // 2. agrégat par barista
+      const counts = {};
+      doneRows.forEach(r => {
+        const name = r.done_by || '???';
+        counts[name] = (counts[name] || 0) + 1;
+      });
+
+      const labels = Object.keys(counts);
+      const values = Object.values(counts);
+
+      const ctx = document.getElementById('byBarista').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: "Tâches faites",
+            data: values
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: { ticks: { color: '#fff'} },
+            y: { ticks: { color: '#fff'}, beginAtZero: true }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
