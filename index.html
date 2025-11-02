@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MLC Process – Avenue Blanc</title>
+
+  <!-- font arcade -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+  <!-- PWA (facultatif si tu l’avais déjà) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#000000" />
+
+  <!-- Supabase v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root {
+      --bg: #000;
+      --arcade-green: #00ff66;
+      --task-bg: #00ff66;
+      --task-text: #000;
+      --section-bg: rgba(255,255,255,0.03);
+      --danger-red: #ff0033;
+    }
+    
+    body {
+      background: var(--bg);
+      font-family: "Press Start 2P", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--arcade-green);
+      padding: 24px 18px 100px;
+      max-width: 720px;
+      margin: auto;
+      line-height: 1.6;
+      font-size: 1rem; /* 👈 police globale plus grande */
+    }
+    
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    header img {
+      max-width: 160px;
+      display: block;
+      margin: 0 auto 12px;
+      image-rendering: crisp-edges;
+    }
+    
+    h1 {
+      font-size: 1.1rem;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+    
+    .datetime {
+      font-size: 0.8rem;
+      margin-bottom: 14px;
+      color: #aaffcc;
+    }
+    
+    .reset-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    
+    #resetBtn {
+      background: #ff9900;
+      color: #000;
+      border: 2px solid #000;
+      border-radius: 12px;
+      padding: 10px 18px;
+      font-size: 0.8rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+      transition: transform 0.1s ease-in;
+    }
+    #resetBtn:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 rgba(0,0,0,0.4);
+    }
+    
+    .small-hint {
+      font-size: 0.65rem;
+      color: #999;
+      flex: 1 1 100%;
+      text-align: center;
+    }
+    
+    .section {
+      margin-top: 20px;
+      padding: 14px 10px 8px;
+      border: 1px solid rgba(0,255,102,0.25);
+      border-radius: 12px;
+      background: radial-gradient(circle, rgba(0,255,102,0.08), rgba(0,0,0,1));
+    }
+    
+    .section h2 {
+      color: #ffffff;
+      font-size: 0.9rem;
+      border-bottom: 1px solid rgba(0,255,102,0.2);
+      padding-bottom: 6px;
+      margin: 0 0 10px;
+    }
+    
+    .task {
+      background: var(--task-bg);
+      color: var(--task-text);
+      border: 2px solid #006633;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 10px 0;
+      font-size: 0.9rem; /* 👈 beaucoup plus lisible */
+      box-shadow: 0 3px 0 rgba(0,0,0,0.35);
+      transition: transform 0.15s ease-out, opacity 0.15s ease-out, background 0.2s linear;
+      touch-action: pan-y;
+    }
+    
+    .task.done {
+      display: none;
+    }
+    
+    .task.swiping {
+      opacity: 0.7;
+    }
+    
+    .task-time {
+      display: inline-block;
+      font-weight: 700;
+      margin-right: 10px;
+    }
+    
+    .scanline {
+      position: fixed;
+      pointer-events: none;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0) 0px,
+        rgba(0,0,0,0) 3px,
+        rgba(0,255,102,0.03) 4px
+      );
+      mix-blend-mode: screen;
+      opacity: 0.35;
+    }
+    </style>    
+
+    /* === LOGIN OVERLAY === */
+    #loginOverlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+    }
+    .login-box {
+      width: min(92%, 460px);
+      border: 2px solid #00ff66;
+      border-radius: 18px;
+      padding: 22px 18px 20px;
+      background: radial-gradient(circle, rgba(0,255,102,0.12), #000);
+      box-shadow: 0 10px 50px rgba(0,255,102,0.15);
+      text-align: center;
+    }
+    .login-box h2 {
+      font-size: 1rem;
+      margin-bottom: 16px;
+    }
+    .login-input {
+      width: 100%;
+      background: transparent;
+      border: 2px solid #00ff66;
+      border-radius: 999px;
+      padding: 10px 14px 12px;
+      margin-bottom: 12px;
+      color: #00ff66;
+      font-family: inherit;
+      font-size: 0.6rem;
+    }
+    .login-input::placeholder {
+      color: #00ff6688;
+    }
+    .login-btn {
+      width: 100%;
+      background: #00ff66;
+      color: #000;
+      border: none;
+      border-radius: 16px;
+      padding: 10px 12px 12px;
+      margin-bottom: 8px;
+      font-size: 0.6rem;
+      cursor: pointer;
+    }
+    .login-secondary {
+      background: transparent;
+      border: 1px solid #00ff66;
+      color: #00ff66;
+    }
+    .oauth-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .oauth-btn {
+      flex: 1;
+      background: #fff;
+      border-radius: 10px;
+      border: none;
+      padding: 6px 0 7px;
+      font-size: 0.55rem;
+    }
+    #loginError {
+      color: #ff4444;
+      font-size: 0.5rem;
+      margin-top: 6px;
+      min-height: 12px;
+    }
+    /* masquer l'app tant qu'on n'est pas loggé */
+    #appContent.hidden {
+      display: none;
+    }
+  </style>
+
+  <script>
+    /* ========= 1. CONFIG SUPABASE ========= */
+    const SUPABASE_URL = "https://juxppkjqsnzjomxrviez.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1eHBwa2pxc256am9teHJ2aWV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMzAyODMsImV4cCI6MjA3NzYwNjI4M30.LlWf3ougVJLRxvlUbSjKIVCL8_eWgIqVOVGI7ZkAKAs";
+    const SUPABASE_TABLE_LOGS = "task_logs";
+    const SUPABASE_TABLE_STATE = "task_state";
+
+    const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    /* ========= 2. UTILITAIRES ========= */
+    function mlcTodayISO() {
+      return new Date().toISOString().slice(0, 10); // "2025-11-02"
+    }
+
+    function mlcGetCurrentUserLocal() {
+      try {
+        const u = localStorage.getItem("mlc_user");
+        return u ? JSON.parse(u) : null;
+      } catch(e) {
+        return null;
+      }
+    }
+    function mlcSetCurrentUserLocal(obj) {
+      localStorage.setItem("mlc_user", JSON.stringify(obj));
+    }
+
+    /* ========= 3. LOGIN ========= */
+    async function mlcShowAppAfterLogin(user) {
+      // on garde une version light en local
+      mlcSetCurrentUserLocal({
+        id: user.id,
+        email: user.email || "",
+        name: user.user_metadata?.name || user.email || ""
+      });
+
+      // masquer overlay, afficher app
+      document.getElementById("loginOverlay").style.display = "none";
+      document.getElementById("appContent").classList.remove("hidden");
+
+      // charger état du jour
+      await mlcLoadTaskStateForToday();
+      mlcSubscribeTaskState();
+    }
+
+    async function mlcHandleLogin() {
+      const email = document.getElementById("loginEmail").value.trim();
+      const pass  = document.getElementById("loginPass").value.trim();
+      const errBox = document.getElementById("loginError");
+      errBox.textContent = "";
+
+      if (!email || !pass) {
+        errBox.textContent = "Email + mot de passe";
+        return;
+      }
+
+      const { data, error } = await supa.auth.signInWithPassword({
+        email,
+        password: pass
+      });
+
+      if (error) {
+        errBox.textContent = error.message;
+        return;
+      }
+
+      await mlcShowAppAfterLogin(data.user);
+    }
+
+    async function mlcHandleSignup() {
+      const email = document.getElementById("loginEmail").value.trim();
+      const pass  = document.getElementById("loginPass").value.trim();
+      const errBox = document.getElementById("loginError");
+      errBox.textContent = "";
+
+      if (!email || !pass) {
+        errBox.textContent = "Email + mot de passe";
+        return;
+      }
+
+      const { data, error } = await supa.auth.signUp({
+        email,
+        password: pass
+      });
+
+      if (error) {
+        errBox.textContent = error.message;
+        return;
+      }
+      // si email confirmation désactivée → on est loggé direct
+      await mlcShowAppAfterLogin(data.user);
+    }
+
+    /* ========= 4. LOG DANS task_logs ========= */
+    async function mlcLogTask({ taskId, taskText, section, shop = "Avenue Blanc" }) {
+      // essayer de récupérer l’utilisateur supabase
+      let { data: { user } } = await supa.auth.getUser();
+      const localUser = mlcGetCurrentUserLocal();
+
+      const displayName =
+        (user && (user.user_metadata?.name || user.email)) ||
+        (localUser && (localUser.name || localUser.email)) ||
+        "Unknown";
+
+      const nowIso = new Date().toISOString();
+
+      const payload = {
+        "User_name": displayName,
+        "Shop": shop,
+        "Task_id": taskId || "",
+        "Task_text": taskText || "",
+        "section": section || "",
+        "Timestamp": nowIso,
+        "Created_at": nowIso
+      };
+
+      const { error } = await supa
+        .from(SUPABASE_TABLE_LOGS)
+        .insert(payload);
+
+      const errBox = document.getElementById("mlcErr");
+      if (error) {
+        console.warn("❗ Supabase insert error:", error);
+        if (errBox) errBox.textContent = "Supabase error: " + error.message;
+      } else {
+        if (errBox) errBox.textContent = "";
+      }
+    }
+
+    /* ========= 5. ETAT PARTAGÉ : task_state ========= */
+
+    // charger les tâches déjà faites aujourd’hui
+    async function mlcLoadTaskStateForToday() {
+      const today = mlcTodayISO();
+      const { data, error } = await supa
+        .from(SUPABASE_TABLE_STATE)
+        .select("task_id, done")
+        .eq("task_date", today);
+
+      if (error) {
+        console.warn("❗ load task_state error", error);
+        return;
+      }
+
+      data.forEach(row => {
+        const el = document.querySelector(`.task[data-id="${row.task_id}"]`);
+        if (!el) return;
+        if (row.done) {
+          el.classList.add("done");
+        } else {
+          el.classList.remove("done");
+        }
+      });
+    }
+
+    // s’abonner en realtime
+    function mlcSubscribeTaskState() {
+      const today = mlcTodayISO();
+
+      supa
+        .channel("mlc-task-state")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: SUPABASE_TABLE_STATE,
+            filter: `task_date=eq.${today}`
+          },
+          (payload) => {
+            const row = payload.new;
+            if (!row) return;
+            const el = document.querySelector(`.task[data-id="${row.task_id}"]`);
+            if (!el) return;
+            if (row.done) {
+              el.classList.add("done");
+            } else {
+              el.classList.remove("done");
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    // auto reset côté supabase à 05:00 → on supprime les lignes du jour
+    async function mlcAutoResetSupabase() {
+      const now = new Date();
+      const hour = now.getHours();
+      const today = mlcTodayISO();
+      const lastReset = localStorage.getItem("mlc_last_reset_supabase");
+      if (hour >= 5 && lastReset !== today) {
+        await supa
+          .from(SUPABASE_TABLE_STATE)
+          .delete()
+          .eq("task_date", today);
+        localStorage.setItem("mlc_last_reset_supabase", today);
+        console.log("✅ Daily remote reset done");
+      }
+    }
+
+    /* ========= 6. UI / SWIPE / RESET ========= */
+
+    function updateDateTime() {
+      const now = new Date();
+      const dateTimeString = now.toLocaleString('fr-FR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      const el = document.getElementById('currentDateTime');
+      if (el) el.textContent = dateTimeString;
+    }
+
+    function enableSwipe(taskEl) {
+      let startX = 0;
+      let currentX = 0;
+      let isSwiping = false;
+      const SWIPE_THRESHOLD = 50;
+
+      taskEl.addEventListener('touchstart', (e) => {
+        const touch = e.touches[0];
+        startX = touch.clientX;
+        currentX = startX;
+        isSwiping = true;
+        taskEl.classList.add('swiping');
+      }, {passive: true});
+
+      taskEl.addEventListener('touchmove', (e) => {
+        if (!isSwiping) return;
+        const touch = e.touches[0];
+        currentX = touch.clientX;
+        const deltaX = currentX - startX;
+        taskEl.style.transform = `translateX(${deltaX}px)`;
+      }, {passive: true});
+
+      taskEl.addEventListener('touchend', () => {
+        if (!isSwiping) return;
+        const deltaX = currentX - startX;
+        taskEl.classList.remove('swiping');
+        taskEl.style.transform = 'translateX(0)';
+
+        if (deltaX > SWIPE_THRESHOLD) {
+          markTaskDone(taskEl);
+        } else if (deltaX < -SWIPE_THRESHOLD) {
+          moveTaskToBottom(taskEl);
+        }
+        isSwiping = false;
+      });
+    }
+
+    // marquer comme fait (local + logs + état partagé)
+    async function markTaskDone(taskEl) {
+      taskEl.classList.add('done');
+
+      const id = taskEl.dataset.id;
+      // local (pour backup)
+      if (id) {
+        const doneTasks = JSON.parse(localStorage.getItem('mlc_done_tasks') || '[]');
+        if (!doneTasks.includes(id)) {
+          doneTasks.push(id);
+          localStorage.setItem('mlc_done_tasks', JSON.stringify(doneTasks));
+        }
+      }
+
+      const section = taskEl.closest('.section') ? taskEl.closest('.section').id : "";
+      const text = taskEl.textContent.trim();
+
+      // 1) log dans task_logs
+      await mlcLogTask({
+        taskId: id,
+        taskText: text,
+        section: section,
+        shop: "Avenue Blanc"
+      });
+
+      // 2) état partagé
+      const today = mlcTodayISO();
+      const currentUser = mlcGetCurrentUserLocal();
+      await supa
+        .from(SUPABASE_TABLE_STATE)
+        .upsert({
+          task_id: id,
+          task_date: today,
+          done: true,
+          done_by: currentUser ? (currentUser.name || currentUser.email) : null
+        }, { onConflict: 'task_id,task_date' });
+    }
+
+    // swipe gauche → remettre en bas + re-ouvrir pour tout le monde
+    async function moveTaskToBottom(taskEl) {
+      const parent = taskEl.parentElement;
+      parent.appendChild(taskEl);
+
+      const id = taskEl.dataset.id;
+      const today = mlcTodayISO();
+
+      // enlever l’état partagé
+      await supa
+        .from(SUPABASE_TABLE_STATE)
+        .upsert({
+          task_id: id,
+          task_date: today,
+          done: false
+        }, { onConflict: 'task_id,task_date' });
+
+      // enlever du local
+      const doneTasks = JSON.parse(localStorage.getItem('mlc_done_tasks') || '[]');
+      const newList = doneTasks.filter(t => t !== id);
+      localStorage.setItem('mlc_done_tasks', JSON.stringify(newList));
+
+      taskEl.classList.remove('done');
+    }
+
+    function restoreDoneTasksLocal() {
+      const doneTasks = JSON.parse(localStorage.getItem('mlc_done_tasks') || '[]');
+      doneTasks.forEach(id => {
+        const el = document.querySelector(`.task[data-id="${id}"]`);
+        if (el) el.classList.add('done');
+      });
+    }
+
+    function resetTasks() {
+      if (confirm("Reset all tasks?")) {
+        localStorage.removeItem('mlc_done_tasks');
+        localStorage.removeItem('mlc_last_reset');
+        location.reload();
+      }
+    }
+
+    // urgence → rouge si en retard
+    function applyUrgencyColors() {
+      const now = new Date();
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+      document.querySelectorAll('.task').forEach(task => {
+        const start = task.dataset.start;
+        if (!start) return;
+        const [hh, mm] = start.split(':').map(Number);
+        const taskMinutes = hh * 60 + mm;
+
+        const baseGreen = { r: 0, g: 255, b: 102 };
+        const baseRed   = { r: 255, g: 0, b: 51 };
+
+        let ratio = 0;
+        if (nowMinutes > taskMinutes) {
+          const diff = Math.min(nowMinutes - taskMinutes, 90);
+          ratio = diff / 90;
+        }
+        const r = Math.round(baseGreen.r + (baseRed.r - baseGreen.r) * ratio);
+        const g = Math.round(baseGreen.g + (baseRed.g - baseGreen.g) * ratio);
+        const b = Math.round(baseGreen.b + (baseRed.b - baseGreen.b) * ratio);
+        task.style.backgroundColor = `rgb(${r},${g},${b})`;
+      });
+    }
+
+    // auto reset local à 05:00
+    (function autoResetDailyLocal() {
+      const now = new Date();
+      const lastReset = localStorage.getItem('mlc_last_reset');
+      const today = now.toISOString().slice(0, 10);
+      const hour = now.getHours();
+      if (hour >= 5 && lastReset !== today) {
+        localStorage.removeItem('mlc_done_tasks');
+        localStorage.setItem('mlc_last_reset', today);
+        console.log('✅ Local daily reset executed');
+      }
+    })();
+
+    // onload
+    window.onload = async function () {
+      updateDateTime();
+      setInterval(updateDateTime, 60000);
+
+      document.querySelectorAll('.task').forEach((task, index) => {
+        if (!task.dataset.id) {
+          task.dataset.id = 'task-' + index;
+        }
+        enableSwipe(task);
+      });
+
+      restoreDoneTasksLocal();
+      applyUrgencyColors();
+      setInterval(applyUrgencyColors, 5 * 60 * 1000);
+      mlcAutoResetSupabase();
+
+      const btn = document.getElementById('resetBtn');
+      if (btn) btn.addEventListener('click', resetTasks);
+
+      // essayer auto-login si on a un token supabase
+      const { data: { user } } = await supa.auth.getUser();
+      if (user) {
+        await mlcShowAppAfterLogin(user);
+      }
+    };
+  </script>
+</head>
+<body>
+  <div class="scanline"></div>
+
+  <!-- === LOGIN OVERLAY === -->
+  <div id="loginOverlay">
+    <div class="login-box">
+      <h2>MLC Staff Login</h2>
+      <input id="loginEmail" type="email" class="login-input" placeholder="email@..." />
+      <input id="loginPass" type="password" class="login-input" placeholder="mot de passe" />
+      <button class="login-btn" onclick="mlcHandleLogin()">Se connecter</button>
+      <button class="login-btn login-secondary" onclick="mlcHandleSignup()">Créer un compte</button>
+      <div class="oauth-row">
+        <button class="oauth-btn" disabled>Google</button>
+        <button class="oauth-btn" disabled>Apple</button>
+      </div>
+      <div id="loginError"></div>
+    </div>
+  </div>
+
+  <!-- === APP CONTENT === -->
+  <div id="appContent" class="hidden">
+    <header>
+      <img src="logo-mlc.png" alt="My Little Cup" />
+      <h1>PROCESS – AVENUE BLANC</h1>
+      <div class="datetime" id="currentDateTime">...</div>
+    </header>
+
+    <div id="mlcErr" style="color:#ff6666;font-size:.55rem;margin-bottom:6px;"></div>
+
+    <div class="reset-bar">
+      <button id="resetBtn">☕ Reset</button>
+      <span class="small-hint">▶︎ done • ◀︎ send to bottom • auto reset 05:00 • synced</span>
+    </div>
+
+    <!-- OPEN -->
+    <div class="section" id="open">
+      <h2>Open</h2>
+      <div class="task" data-id="open-1" data-start="09:30">
+        <span class="task-time">09:30</span>
+        Bring back trays and check tables on the way back
+      </div>
+    </div>
+
+    <!-- RUSH -->
+    <div class="section" id="rush">
+      <h2>Rush</h2>
+    </div>
+
+    <!-- POST-RUSH -->
+    <div class="section" id="post-rush">
+      <h2>Post-Rush</h2>
+      <div class="task" data-id="pr-2" data-start="10:00"><span class="task-time">10:00</span>1st barista take 15' break</div>
+      <div class="task" data-id="pr-3" data-start="10:00"><span class="task-time">10:00</span>Refill Ubermilk / Oat Milk</div>
+      <div class="task" data-id="pr-4" data-start="10:03"><span class="task-time">10:03</span>Refill grinder</div>
+      <div class="task" data-id="pr-5" data-start="10:05"><span class="task-time">10:05</span>Clean around grinder</div>
+      <div class="task" data-id="pr-6" data-start="10:06"><span class="task-time">10:06</span>Rinse machine tray + pitchers + glass shots + steam cloth</div>
+      <div class="task" data-id="pr-7" data-start="10:10"><span class="task-time">10:10</span>Clean counter surfaces around espresso machine (spray + paper)</div>
+      <div class="task" data-id="pr-8" data-start="10:13"><span class="task-time">10:13</span>Clean machine panels</div>
+      <div class="task" data-id="pr-9" data-start="10:15"><span class="task-time">10:15</span>2nd barista takes 15' break</div>
+      <div class="task" data-id="pr-10" data-start="10:30"><span class="task-time">10:30</span>Sweep behind the counter</div>
+      <div class="task" data-id="pr-11" data-start="10:32"><span class="task-time">10:32</span>Stamp 50 cups / 50 pastry bags / 50 ice cups / 10 bottles</div>
+      <div class="task" data-id="pr-12" data-start="10:50"><span class="task-time">10:50</span>Mop toilets floor + check toilets</div>
+    </div>
+
+    <!-- CUISINE -->
+    <div class="section" id="cuisine">
+      <h2>Cuisine</h2>
+      <div class="task" data-id="cu-2" data-start="10:30"><span class="task-time">10:30</span>Prepare yogourts → sandwiches → bagels → trays for close</div>
+      <div class="task" data-id="cu-3" data-start="11:40"><span class="task-time">11:40</span>Clean prep table &amp; prepare almond croissants station</div>
+      <div class="task" data-id="cu-5" data-start="14:30"><span class="task-time">14:30</span>Prepare yogourts / bagels / chia pudding</div>
+      <div class="task" data-id="cu-6" data-start="15:00"><span class="task-time">15:00</span>Clean prep table + prepare almond croissants station</div>
+    </div>
+
+    <!-- PRE-RUSH DEJEUNER -->
+    <div class="section" id="pre-rush-dejeuner">
+      <h2>Pré-Rush déjeuner</h2>
+      <div class="task" data-id="prd-2" data-start="09:45"><span class="task-time">09:45</span>Refill viennoiseries / pastries / cook more if needed</div>
+      <div class="task" data-id="prd-3" data-start="10:15"><span class="task-time">10:15</span>Refill ice machine / cooler</div>
+      <div class="task" data-id="prd-4" data-start="10:17"><span class="task-time">10:17</span>Check batch brew, prepare 2nd if &lt; 2 cups</div>
+      <div class="task" data-id="prd-5" data-start="10:20"><span class="task-time">10:20</span>Press 6 orange juices</div>
+      <div class="task" data-id="prd-6" data-start="11:45"><span class="task-time">11:45</span>Counter (lunch peak)</div>
+      <div class="task" data-id="pr-13" data-start="11:30"><span class="task-time">11:30</span>Put all forks and knives in paper towels</div>
+      <div class="task" data-id="pr-14" data-start="11:45"><span class="task-time">11:45</span>Refill ice machine / cooler</div>
+      <div class="task" data-id="pr-15" data-start="11:47"><span class="task-time">11:47</span>Refill Ubermilk + ROA + grinder &amp; clean barista station</div>
+    </div>
+
+    <!-- RUSH DEJEUNER -->
+    <div class="section" id="rush-dejeuner">
+      <h2>Rush déjeuner</h2>
+      <div class="task" data-id="rd-1" data-start="11:45"><span class="task-time">11:45</span>1 barista lunch break</div>
+    </div>
+
+    <!-- POST-RUSH DEJEUNER -->
+    <div class="section" id="post-rush-dejeuner">
+      <h2>Post-Rush déjeuner</h2>
+      <div class="task" data-id="prd2-2" data-start="13:45"><span class="task-time">13:45</span>2nd barista lunch break</div>
+      <div class="task" data-id="prd2-3" data-start="14:00"><span class="task-time">14:00</span>Refill ice machine / cooler</div>
+      <div class="task" data-id="prd2-4" data-start="14:02"><span class="task-time">14:02</span>Refill Ubermilk / grinder &amp; clean barista station</div>
+      <div class="task" data-id="prd2-5" data-start="14:05"><span class="task-time">14:05</span>Check pastries/viennoiseries &amp; cook more</div>
+    </div>
+
+    <!-- PRE-CLOSE -->
+    <div class="section" id="pre-close">
+      <h2>Pré-Close</h2>
+      <div class="task" data-id="pc-2" data-start="14:30"><span class="task-time">14:30</span>Next day moccamaster: dose + filter</div>
+      <div class="task" data-id="pc-3" data-start="14:35"><span class="task-time">14:35</span>Fill below coffee machine with solo coffee bags</div>
+      <div class="task" data-id="pc-4" data-start="14:37"><span class="task-time">14:37</span>Empty trash &amp; replace bag: sink / coffee / main room</div>
+      <div class="task" data-id="pc-5" data-start="14:45"><span class="task-time">14:45</span>Fill basket's orange + 1 bottle + 3×250ml</div>
+      <div class="task" data-id="pc-6" data-start="14:55"><span class="task-time">14:55</span>Fill counter fridge with milk + 10 oat</div>
+      <div class="task" data-id="pc-7" data-start="15:00"><span class="task-time">15:00</span>Rearrange pastries and clean pastry showcase</div>
+      <div class="task" data-id="pc-8" data-start="15:05"><span class="task-time">15:05</span>Empty trash and replace bag</div>
+      <div class="task" data-id="pc-9" data-start="15:10"><span class="task-time">15:10</span>Toilets cleaning floor and overall cleanliness</div>
+      <div class="task" data-id="pc-13" data-start="15:45"><span class="task-time">15:45</span>Clean Ubermilk</div>
+      <div class="task" data-id="pc-14" data-start="15:50"><span class="task-time">15:50</span>Launch moccamaster with 1L water + 1 tsp Pulycaff</div>
+      <div class="task" data-id="pc-15" data-start="16:04"><span class="task-time">16:04</span>Main room – clean tables, sweep, stains</div>
+      <div class="task" data-id="pc-16" data-start="16:15"><span class="task-time">16:15</span>Attach cable for terrace (code 789)</div>
+      <div class="task" data-id="pc-17" data-start="16:17"><span class="task-time">16:17</span>Refill lids, realign fridge products, prepare water jar</div>
+      <div class="task" data-id="pc-18" data-start="16:20"><span class="task-time">16:20</span>Warn customers we close in 10'</div>
+      <div class="task" data-id="pc-19" data-start="16:25"><span class="task-time">16:25</span>Clean barista station + pitchers + trays + espresso panels</div>
+      <div class="task" data-id="pc-20" data-start="16:30"><span class="task-time">16:30</span>Closing – espresso machine &amp; grinder cleaning</div>
+    </div>
+
+    <!-- CLOSE -->
+    <div class="section" id="close">
+      <h2>Close</h2>
+      <div class="task" data-id="cl-1" data-start="16:47"><span class="task-time">16:47</span>Closing – counter</div>
+      <div class="task" data-id="cl-2" data-start="16:48"><span class="task-time">16:48</span>Put croissant &amp; pain chocolat in box → kitchen fridge</div>
+      <div class="task" data-id="cl-3" data-start="16:50"><span class="task-time">16:50</span>Discard remaining pastries (log waste in iPad)</div>
+      <div class="task" data-id="cl-4" data-start="16:50"><span class="task-time">16:50</span>Clean pastry showcase + labels</div>
+      <div class="task" data-id="cl-5" data-start="16:55"><span class="task-time">16:55</span>Place milk box, prep Ubermilk filter, dry pipe, refill counter fridge</div>
+      <div class="task" data-id="cl-6" data-start="17:00"><span class="task-time">17:00</span>Closing – main room</div>
+      <div class="task" data-id="cl-7" data-start="17:05"><span class="task-time">17:05</span>Take picture of self service fridge → Slack</div>
+      <div class="task" data-id="cl-8" data-start="17:10"><span class="task-time">17:10</span>Clean recycling station / last cups</div>
+      <div class="task" data-id="cl-10" data-start="17:27"><span class="task-time">17:27</span>Close register – clock-out</div>
+    </div>
+
+  </div><!-- /appContent -->
+</body>
+</html>
